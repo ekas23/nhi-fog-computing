@@ -1,0 +1,30 @@
+# NASA PCoE battery data (~122 MB) — too large for git.
+# Download separately, see data/README.md
+data/nasa_mat/
+*.mat
+data/nasa_cache.pkl
+
+# SUMO intermediates (regenerate with sumo/generate_traces.sh)
+sumo/*.fcd.xml
+sumo/*.trips.xml
+sumo/*.rou.xml
+sumo/*.rou.alt.xml
+sumo/sub.net.xml
+sumo/hwy.net.xml
+
+# iFogSim2 itself is a separate MIT-licensed project — not vendored here.
+# See java/README.md for how to apply this package to a clone.
+iFogSim2/
+out/
+*.class
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
