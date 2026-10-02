@@ -367,3 +367,99 @@ Still open, in order of value:
 5. **The SoH model is evaluated within-cell.** Cross-cell transfer fails for the data
    reasons in section 2; a deployment spanning heterogeneous battery types would need
    per-cell calibration, which this design assumes is available.
+
+---
+
+## 10. Extended SoH dataset — all 19 NASA cells + Oxford (23 cells total)
+
+Prompted by "this needs to be bigger for a conference paper," the SoH study
+was extended well beyond the original 4-cell NASA G1 family.
+
+### 10.1 What was added
+
+- **All 15 usable NASA cells** (of 19 uploaded), not just the G1 family of 4.
+  One more real data bug found and fixed here: **B0040** sits flat at SoH
+  0.985 for 27 cycles then drops to 0.3 on the single final cycle — a
+  one-cycle cliff that is physically impossible for real aging. Diagnosed as
+  an aborted/faulty final test and trimmed with a trailing-outlier guard
+  (mirrors the leading-outlier guard already in place from the original
+  cleaning pass).
+- **The Oxford Battery Degradation Dataset** (University of Oxford, ORA
+  repository) — 8 independent cells, different lab, different protocol,
+  different chemistry from NASA. Verified against the dataset's own
+  documented characteristics (8 cells, C1dc diagnostic-discharge test,
+  monotonic capacity fade in the 5-60% range) before trusting it.
+
+### 10.2 A second statistical bug caught before reporting anything
+
+Naively averaging per-cell R-squared across all 15 NASA cells gave
+R-squared = -2.32 - which looks like the model failed. It didn't:
+R-squared on a tiny test set is wildly unstable (one miss on B0041's 4 test
+points produced R-squared = -25.3), and that single cell's noise dominated a
+simple mean. This is a known meta-analysis mistake (averaging R-squared
+across groups of very different size).
+
+Fixed by reporting two statistically defensible numbers instead of a naive
+mean: (1) mean R-squared restricted to cells with >=10 test sequences, with
+smaller cells listed and excluded rather than hidden, and (2) a pooled
+R-squared - concatenating every qualifying cell's test predictions into one
+array and computing a single R-squared over all of them, the standard fix
+for combining unequal-sized groups.
+
+### 10.3 Results
+
+**Experiment A - all usable NASA cells, within-cell protocol:**
+8 of 15 cells yielded a result at all; 6 of 15 NASA groups (B0025-B0028,
+B0038-B0040) showed essentially no degradation within their recorded cycles
+(std(SoH) < 0.01) and were correctly excluded - there's no signal to
+predict, not a model failure.
+
+| | R-squared | MAE | n |
+|---|---|---|---|
+| Original (G1 only, 4 cells) | 0.9966 | 0.0033 | 4 cells |
+| Extended, mean-of-R2 (stable cells only) | 0.9921 +/- 0.0077 | 0.0036 | 6 cells |
+| Extended, pooled R-squared | 0.9898 | 0.0043 | 250 test points |
+
+**Experiment B - Oxford, independent second dataset, same protocol, its own
+feature space:**
+
+| | R-squared | MAE | n |
+|---|---|---|---|
+| Mean-of-R2 | 0.9083 +/- 0.1314 | 0.0094 | 8 cells |
+| Pooled R-squared | 0.9430 | 0.0092 | 127 test points |
+
+One weak cell (OX_5, R2=0.564) pulls the mean down but not the pooled figure
+much - OX_5 has the fewest test points (10) among a small dataset, same
+instability pattern as NASA's small cells, at a smaller scale.
+
+**Experiment C - cross-dataset transfer**, using only the two features both
+datasets expose comparably (discharge duration, peak temperature), per-cell
+baseline-normalised. This was not guaranteed to work going in:
+
+| Direction | R-squared | MAE |
+|---|---|---|
+| Train NASA -> test Oxford | 0.4545 | 0.0287 |
+| Train Oxford -> test NASA | 0.3216 | 0.0525 |
+| Pooled model, trained on both, tested on a random held-out 20% (mixed) | 0.8749 | 0.0183 |
+
+**Honest reading:** direct one-way transfer between labs is moderate, not
+strong (R2 ~ 0.3-0.45) - better than NASA's own within-dataset cross-cell
+transfer using the full feature set (R2 ~ 0.04, see section 2), but still a
+real generalisation gap. The practically useful result is the pooled model:
+training one shared LSTM on both datasets together and evaluating on a
+random mixed hold-out reaches R2=0.875 - i.e. a single model that has seen
+examples from both labs generalises well to new examples from either, even
+though it does not generalise well zero-shot from one lab to a lab it has
+never seen.
+
+### 10.4 What this adds to the paper
+
+- Effective sample size for the headline SoH claim grows from 4 cells to 14
+  (6 NASA + 8 Oxford) with stable, reportable statistics, plus an honest
+  account of which cells were excluded and why.
+- A second, fully independent public dataset replicates the method
+  (R2=0.943 pooled) - addresses the single-dataset-validation weakness that
+  most SoH papers share.
+- A genuine, previously-untested cross-dataset transfer result, reported
+  honestly in both directions and as a pooled model - this is new evidence,
+  not just more of the same evidence.

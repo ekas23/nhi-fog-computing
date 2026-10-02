@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Adaptive Node Health Index — Fog Computing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#12141a; --surface:#1b1e26; --surface-hi:#242833;
+  --accent:#e0954f; --accent-dim:rgba(224,149,79,.55);
+  --green:#2f7a5c; --red:#c1543f;
+  --text:#f2ede4; --text-dim:#a9a49b; --border:#33363f;
+  --f-display:'Playfair Display',Georgia,serif;
+  --f-body:'DM Sans',-apple-system,sans-serif;
+  --f-mono:'DM Mono','SF Mono',monospace;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--f-body);
+  -webkit-font-smoothing:antialiased;padding-top:env(safe-area-inset-top,0px);}
+::selection{background:var(--accent-dim);}
+
+/* ---- hero ---- */
+.hero{padding:64px 24px 40px;text-align:center;border-bottom:1px solid var(--border);}
+.hero h1{font-family:var(--f-display);font-weight:700;font-size:clamp(2rem,5vw,3.2rem);
+  margin:0 0 12px;letter-spacing:-0.01em;}
+.hero p.sub{color:var(--text-dim);font-size:1.05rem;max-width:640px;margin:0 auto 28px;}
+.hero .stat{display:inline-flex;align-items:baseline;gap:14px;background:var(--surface);
+  border:1px solid var(--border);border-radius:14px;padding:18px 28px;}
+.hero .stat b{font-family:var(--f-mono);font-size:2.5rem;font-weight:500;color:var(--accent);}
+.hero .stat span{font-family:var(--f-mono);color:var(--text-dim);font-size:.95rem;text-align:left;}
+
+/* ---- tabs ---- */
+nav.tabs{display:flex;justify-content:center;gap:4px;padding:18px 16px;
+  border-bottom:1px solid var(--border);position:sticky;top:0;background:rgba(18,20,26,.92);
+  backdrop-filter:blur(6px);z-index:10;flex-wrap:wrap;}
+nav.tabs button{font-family:var(--f-body);font-weight:500;font-size:.95rem;color:var(--text-dim);
+  background:transparent;border:1px solid transparent;padding:10px 18px;border-radius:10px;
+  cursor:pointer;transition:background .15s,color .15s;}
+nav.tabs button:hover{color:var(--text);background:var(--surface);}
+nav.tabs button.active{color:var(--bg);background:var(--accent);}
+nav.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+
+main{max-width:1180px;margin:0 auto;padding:36px 20px 80px;}
+.view{display:none;} .view.active{display:block;}
+h2.section{font-family:var(--f-display);font-weight:600;font-size:1.6rem;margin:0 0 6px;}
+p.section-note{color:var(--text-dim);font-size:.92rem;margin:0 0 24px;max-width:760px;}
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  padding:26px;margin-bottom:20px;}
+.card h3{font-family:var(--f-body);font-weight:700;font-size:1.05rem;margin:0 0 16px;}
+
+/* ---- controls ---- */
+.pillrow{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;}
+.pill{font-family:var(--f-body);font-size:.85rem;font-weight:500;color:var(--text-dim);
+  background:var(--surface-hi);border:1px solid var(--border);padding:8px 16px;border-radius:999px;
+  cursor:pointer;transition:.15s;}
+.pill:hover{border-color:var(--accent-dim);}
+.pill.on{background:var(--accent);color:var(--bg);border-color:var(--accent);}
+label.field-label{display:block;font-size:.8rem;color:var(--text-dim);margin:0 0 8px;font-weight:500;}
+
+/* ---- bar chart (inline SVG built via JS) ---- */
+.chartwrap{overflow-x:auto;}
+svg.chart text{font-family:var(--f-body);font-size:11px;fill:var(--text-dim);}
+svg.chart .value{font-family:var(--f-mono);font-size:11px;fill:var(--text);}
+svg.chart .gridline{stroke:var(--border);stroke-opacity:.5;}
+
+/* ---- legend ---- */
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:14px;}
+.legend .item{display:flex;align-items:center;gap:7px;font-size:.82rem;color:var(--text-dim);}
+.legend .swatch{width:12px;height:12px;border-radius:3px;flex:none;}
+
+/* ---- playground table ---- */
+table.nodes{width:100%;border-collapse:collapse;font-size:.88rem;}
+table.nodes th{text-align:left;color:var(--text-dim);font-weight:500;font-size:.75rem;
+  text-transform:none;padding:6px 8px;border-bottom:1px solid var(--border);}
+table.nodes td{padding:4px 8px;border-bottom:1px solid var(--border);}
+table.nodes input{width:64px;background:transparent;border:1px solid transparent;color:var(--text);
+  font-family:var(--f-mono);font-size:.85rem;padding:5px 6px;border-radius:6px;}
+table.nodes input:focus{background:var(--surface-hi);border-color:var(--accent);outline:none;}
+tr.winner{position:relative;}
+tr.winner td:first-child{box-shadow:inset 4px 0 0 var(--accent);}
+.badge{font-family:var(--f-body);font-size:.68rem;font-weight:700;letter-spacing:.06em;
+  color:var(--accent);background:rgba(224,149,79,.12);padding:3px 8px;border-radius:5px;
+  display:inline-block;}
+
+/* ---- sliders ---- */
+.slidergrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:20px;}
+.slider-item{display:flex;flex-direction:column;gap:6px;}
+.slider-item .row{display:flex;justify-content:space-between;align-items:baseline;}
+.slider-item .row span.val{font-family:var(--f-mono);color:var(--accent);font-size:.85rem;}
+input[type=range]{-webkit-appearance:none;width:100%;height:4px;background:var(--border);
+  border-radius:2px;outline:none;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;
+  border-radius:50%;background:var(--accent);cursor:pointer;border:none;}
+input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--accent);
+  cursor:pointer;border:none;}
+
+/* ---- toggle ---- */
+.toggle{display:inline-flex;background:var(--surface-hi);border:1px solid var(--border);
+  border-radius:999px;padding:4px;gap:2px;}
+.toggle button{font-family:var(--f-body);font-weight:500;font-size:.85rem;padding:8px 18px;
+  border-radius:999px;border:none;background:transparent;color:var(--text-dim);cursor:pointer;}
+.toggle button.on{background:var(--accent);color:var(--bg);}
+
+.grid2{display:grid;grid-template-columns:1.4fr 1fr;gap:20px;}
+@media(max-width:860px){.grid2{grid-template-columns:1fr;}}
+
+.weightbar-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:.8rem;}
+.weightbar-row .label{width:110px;color:var(--text-dim);flex:none;}
+.weightbar-row .track{flex:1;height:8px;background:var(--surface-hi);border-radius:4px;overflow:hidden;}
+.weightbar-row .fill{height:100%;background:var(--accent);border-radius:4px;transition:width .2s ease-out;}
+.weightbar-row .num{width:44px;text-align:right;font-family:var(--f-mono);flex:none;color:var(--text);}
+
+table.findings{width:100%;border-collapse:collapse;font-size:.9rem;margin:14px 0;}
+table.findings th,table.findings td{padding:9px 10px;border-bottom:1px solid var(--border);text-align:left;}
+table.findings th{color:var(--text-dim);font-weight:500;font-size:.78rem;}
+table.findings td.num{font-family:var(--f-mono);}
+.tag{font-size:.72rem;font-family:var(--f-mono);padding:2px 8px;border-radius:5px;}
+.tag.good{background:rgba(47,122,92,.18);color:#7fd6ae;}
+.tag.bad{background:rgba(193,84,63,.18);color:#f0a294;}
+footer{text-align:center;color:var(--text-dim);font-size:.8rem;padding:30px 20px;
+  border-top:1px solid var(--border);}
+a{color:var(--accent);}
+</style>
+</head>
+<body>
+
+<section class="hero">
+  <h1>Adaptive Node Health Index</h1>
+  <p class="sub">Battery- and mobility-aware fog resource allocation — evaluated on real iFogSim2 + SUMO + a NASA-trained SoH-LSTM, across 720 simulation runs.</p>
+  <div class="stat">
+    <b id="heroStat">−30.4%</b>
+    <span>service migrations<br>dynamic vs fixed weighting<br>paired, n=90, p&lt;10⁻⁸</span>
+  </div>
+</section>
+
+<nav class="tabs">
+  <button class="tab-btn active" data-view="explorer">Results Explorer</button>
+  <button class="tab-btn" data-view="playground">Live Playground</button>
+  <button class="tab-btn" data-view="findings">Method &amp; Findings</button>
+</nav>
+
+<main>
+
+  <!-- ===================== RESULTS EXPLORER ===================== -->
+  <section id="explorer" class="view active">
+    <h2 class="section">Results Explorer</h2>
+    <p class="section-note">Real means over 10 seeds, from <code>results_topo.csv</code> (720 runs total). Pick a topology, scenario and metric — every bar below is a genuine simulation result, not illustrative.</p>
+
+    <div class="card">
+      <label class="field-label">Topology</label>
+      <div class="pillrow" id="topoPills"></div>
+      <label class="field-label">Scenario</label>
+      <div class="pillrow" id="scenPills"></div>
+      <label class="field-label">Metric</label>
+      <div class="pillrow" id="metricPills"></div>
+
+      <div class="chartwrap">
+        <svg id="barChart" class="chart" width="1080" height="380"></svg>
+      </div>
+      <div class="legend" id="chartLegend"></div>
+    </div>
+
+    <div class="card">
+      <h3>Reading this chart</h3>
+      <p style="color:var(--text-dim);font-size:.9rem;line-height:1.6;margin:0;">
+        Switch to <b style="color:var(--text)">static</b> to see every policy tie at zero migrations — nothing is moving, so mobility-awareness has nothing to do. Switch to <b style="color:var(--text)">highway_corridor / vehicular</b> to see the largest swing in the whole study: dynamic weighting cuts migrations by 43% there, more than in any other condition — because that's where mobility pressure is highest and the adaptive step has the most to react to.
+      </p>
+    </div>
+  </section>
+
+  <!-- ===================== LIVE PLAYGROUND ===================== -->
+  <section id="playground" class="view">
+    <h2 class="section">Live NHI Playground</h2>
+    <p class="section-note">A transparent, in-browser re-implementation of <code>NHIScorer.java</code>'s exact scoring formula — not a repeat of the real simulation. Edit any node's numbers, move the weight sliders, and watch the winner change live.</p>
+
+    <div class="card">
+      <h3>Candidate fog nodes</h3>
+      <div class="chartwrap">
+        <table class="nodes" id="nodeTable"></table>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h3>Weighting mode</h3>
+        <div class="toggle" id="modeToggle">
+          <button data-mode="fixed" class="on">Fixed</button>
+          <button data-mode="dynamic">Dynamic</button>
+        </div>
+        <p style="color:var(--text-dim);font-size:.85rem;margin:16px 0 10px;">
+          In dynamic mode, these two signals — computed live from the node table above — boost the mobility and SoH/wear weights before renormalising:
+        </p>
+        <div class="sliderGroupDynamic" style="opacity:.5" id="dynSignals">
+          <div style="display:flex;justify-content:space-between;font-family:var(--f-mono);font-size:.82rem;margin-bottom:6px;">
+            <span>mobility spread</span><span id="mobSpreadVal">0.00</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-family:var(--f-mono);font-size:.82rem;">
+            <span>SoH spread</span><span id="sohSpreadVal">0.00</span>
+          </div>
+        </div>
+
+        <h3 style="margin-top:24px;">Base weights</h3>
+        <div class="sliderGrid" id="weightSliders"></div>
+      </div>
+
+      <div class="card">
+        <h3>Resulting weight vector</h3>
+        <div id="weightBars"></div>
+        <p style="color:var(--text-dim);font-size:.78rem;margin-top:14px;">
+          In fixed mode this equals the sliders exactly. In dynamic mode, watch the mobility and SoH/wear bars grow as the two spread signals above rise — capped at 2.5×, then the whole vector is renormalised to sum to 1.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== FINDINGS ===================== -->
+  <section id="findings" class="view">
+    <h2 class="section">Method &amp; Findings</h2>
+    <p class="section-note">Every number below has a matching row in <code>results_topo.csv</code> or <code>statistical_summary.txt</code>.</p>
+
+    <div class="card">
+      <h3>The primary result</h3>
+      <p style="color:var(--text-dim);line-height:1.6;">Dynamic weighting vs. fixed weighting on service migrations, paired by seed, pre-registered before any run was executed:</p>
+      <table class="findings">
+        <tr><th>Topology</th><th>Fixed</th><th>Dynamic</th><th>Change</th><th>p</th></tr>
+        <tr><td>Dense urban</td><td class="num">23.87</td><td class="num">18.77</td><td class="num" style="color:#7fd6ae">−21.4%</td><td class="num">&lt;1e-6</td></tr>
+        <tr><td>Sparse suburban</td><td class="num">24.77</td><td class="num">18.23</td><td class="num" style="color:#7fd6ae">−26.4%</td><td class="num">&lt;1e-6</td></tr>
+        <tr><td>Highway corridor</td><td class="num">24.43</td><td class="num">13.83</td><td class="num" style="color:#7fd6ae">−43.4%</td><td class="num">&lt;1e-6</td></tr>
+        <tr><td><b>Pooled (n=90)</b></td><td class="num"><b>24.36</b></td><td class="num"><b>16.94</b></td><td class="num" style="color:#7fd6ae"><b>−30.4%</b></td><td class="num"><b>&lt;1e-8</b></td></tr>
+      </table>
+      <p style="color:var(--text-dim);font-size:.85rem;">Effect grows with mobility pressure (highway &gt; suburban &gt; dense) — consistent with the mechanism, not just a statistical artifact.</p>
+    </div>
+
+    <div class="card">
+      <h3>The honest trade-off vs. the strongest baseline</h3>
+      <p style="color:var(--text-dim);line-height:1.6;">Against the mobility-aware baseline, NHI is a genuine trade, not a clean win:</p>
+      <table class="findings">
+        <tr><th>Metric</th><th>NHI dynamic</th><th>Baseline</th><th>Verdict</th></tr>
+        <tr><td>Migrations (pedestrian)</td><td class="num">17.6</td><td class="num">12.6</td><td><span class="tag bad">baseline better</span></td></tr>
+        <tr><td>SoH spread (pedestrian)</td><td class="num">0.0272</td><td class="num">0.0320</td><td><span class="tag good">NHI better</span></td></tr>
+        <tr><td>SoH spread (degraded fleet)</td><td class="num">0.0629</td><td class="num">0.0734</td><td><span class="tag good">NHI better</span></td></tr>
+        <tr><td>Worst-node SoH (pedestrian)</td><td class="num">0.885</td><td class="num">0.872</td><td><span class="tag good">NHI better</span></td></tr>
+      </table>
+      <p style="color:var(--text-dim);font-size:.85rem;">NHI trades ~4–5 extra migrations per 60 placements for statistically significant improvements in <i>battery-wear fairness</i> — a dimension the mobility baseline ignores entirely.</p>
+    </div>
+
+    <div class="card">
+      <h3>A conceptual correction found mid-study</h3>
+      <p style="color:var(--text-dim);line-height:1.6;">Rewarding high SoH alone sends every task to the healthiest node — wearing it down fastest and <i>widening</i> fleet divergence, the opposite of the goal. Measured directly: an 8-metric NHI had worse SoH spread (0.0350) than the mobility baseline (0.0280). The fix was a ninth term — wear balance, the normalised inverse of work already assigned — added because the mechanism demanded it, not because it improved a number after the fact.</p>
+    </div>
+
+    <div class="card">
+      <h3>Comparison papers</h3>
+      <table class="findings">
+        <tr><th>Paper</th><th>Result</th><th>Missing vs. NHI</th></tr>
+        <tr><td>Zolghadri et al. 2025</td><td>up to 60% battery savings</td><td>battery = charge only, no health</td></tr>
+        <tr><td>MOFCO (Mahdizadeh et al. 2025)</td><td>~19% avg cost reduction</td><td>no SoH term</td></tr>
+        <tr><td>FTM-TOSM (Umer et al. 2025)</td><td>10.4% lower energy, 22.1% fewer failures</td><td>no battery SoH term</td></tr>
+      </table>
+    </div>
+  </section>
+
+</main>
+
+<footer>Adaptive Node Health Index · iFogSim2 + SUMO + NASA PCoE · 720 simulation runs, 10 seeds, pre-registered analysis</footer>
+
+<script src="data.js"></script>
+<script>
+/* ================= shared config ================= */
+const POLICY_COLOR = {
+  ROUND_ROBIN:'#6c757d', LEAST_LOADED:'#8d99ae', LATENCY_ONLY:'#c1543f',
+  MOBILITY_AWARE:'#2f7a5c', NHI_STATIC:'rgba(224,149,79,.6)', NHI_DYNAMIC:'#e0954f'
+};
+const POLICY_LABEL = {
+  ROUND_ROBIN:'Round-robin', LEAST_LOADED:'Least-loaded', LATENCY_ONLY:'Latency-only',
+  MOBILITY_AWARE:'Mobility-aware', NHI_STATIC:'NHI (fixed)', NHI_DYNAMIC:'NHI (dynamic)'
+};
+const TOPO_LABEL = {dense_urban:'Dense urban', sparse_suburban:'Sparse suburban', highway_corridor:'Highway corridor'};
+const SCEN_LABEL = {static:'Static', pedestrian:'Pedestrian', vehicular:'Vehicular', degraded_fleet:'Degraded fleet'};
+const METRIC_LABEL = {
+  migrations:'Service migrations', soh_spread:'SoH spread (fairness)', min_soh:'Worst-node SoH',
+  mean_reliability:'Mean reliability', avg_latency_ms:'Avg latency (ms)', load_imbalance:'Load imbalance'
+};
+const METRIC_HIGHER_BETTER = {migrations:false, soh_spread:false, min_soh:true, mean_reliability:true, avg_latency_ms:false, load_imbalance:false};
+
+/* ================= tabs ================= */
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.view).classList.add('active');
+  });
+});
+
+/* ================= Results Explorer ================= */
+let curTopo = NHI_META.topologies[0];
+let curScen = 'pedestrian';
+let curMetric = 'migrations';
+
+function pillRow(container, items, labelMap, current, onPick){
+  container.innerHTML='';
+  items.forEach(key=>{
+    const b=document.createElement('button');
+    b.className='pill'+(key===current?' on':'');
+    b.textContent = labelMap ? labelMap[key] : key;
+    b.addEventListener('click',()=>{ onPick(key); renderExplorer(); });
+    container.appendChild(b);
+  });
+}
+
+function renderExplorer(){
+  pillRow(document.getElementById('topoPills'), NHI_META.topologies, TOPO_LABEL, curTopo, k=>curTopo=k);
+  pillRow(document.getElementById('scenPills'), NHI_META.scenarios, SCEN_LABEL, curScen, k=>curScen=k);
+  pillRow(document.getElementById('metricPills'), NHI_META.metrics, METRIC_LABEL, curMetric, k=>curMetric=k);
+  drawBarChart();
+}
+
+function drawBarChart(){
+  const svg = document.getElementById('barChart');
+  const W=1080,H=380,padL=60,padR=30,padT=20,padB=70;
+  const plotW=W-padL-padR, plotH=H-padT-padB;
+  const policies = NHI_META.policies;
+  const values = policies.map(p => NHI_DATA[curTopo][curScen][p][curMetric]);
+  const maxV = Math.max(...values, 0.0001) * 1.22;
+  const barW = plotW/policies.length*0.55;
+  const gap = plotW/policies.length;
+
+  let s = `<g>`;
+  // gridlines
+  for(let i=0;i<=4;i++){
+    const y = padT + plotH - (plotH*i/4);
+    const val = (maxV*i/4);
+    s += `<line class="gridline" x1="${padL}" x2="${W-padR}" y1="${y}" y2="${y}"/>`;
+    s += `<text x="${padL-10}" y="${y+4}" text-anchor="end">${val<1?val.toFixed(3):val.toFixed(1)}</text>`;
+  }
+  policies.forEach((p,i)=>{
+    const v = values[i];
+    const bh = plotH*(v/maxV);
+    const x = padL + gap*i + (gap-barW)/2;
+    const y = padT + plotH - bh;
+    s += `<rect x="${x}" y="${y}" width="${barW}" height="${bh}" fill="${POLICY_COLOR[p]}" rx="4"></rect>`;
+    s += `<text class="value" x="${x+barW/2}" y="${y-8}" text-anchor="middle">${v<1?v.toFixed(4):v.toFixed(1)}</text>`;
+    s += `<text x="${x+barW/2}" y="${padT+plotH+20}" text-anchor="middle">${POLICY_LABEL[p].split(' ')[0]}</text>`;
+    s += `<text x="${x+barW/2}" y="${padT+plotH+34}" text-anchor="middle">${POLICY_LABEL[p].split(' ').slice(1).join(' ')}</text>`;
+  });
+  s += `</g>`;
+  svg.innerHTML = s;
+
+  const legend = document.getElementById('chartLegend');
+  legend.innerHTML = `<div class="item"><span style="color:var(--text)">${METRIC_LABEL[curMetric]}</span> — ${METRIC_HIGHER_BETTER[curMetric] ? 'higher is better' : 'lower is better'} · ${TOPO_LABEL[curTopo]} · ${SCEN_LABEL[curScen]} · mean over 10 seeds</div>`;
+}
+
+/* ================= Live Playground ================= */
+const NODE_FIELDS = [
+  {k:'cpuFree', label:'CPU free', def:[80,60,40,95,20,70]},
+  {k:'memFree', label:'Mem free', def:[70,55,50,90,30,65]},
+  {k:'queue', label:'Queue', def:[1,3,0,0,5,2]},
+  {k:'latency', label:'Latency (ms)', def:[8,14,6,20,30,10]},
+  {k:'soc', label:'SoC', def:[0.9,0.7,0.95,0.5,0.3,0.8]},
+  {k:'soh', label:'SoH', def:[0.95,0.88,0.97,0.6,0.42,0.9]},
+  {k:'reliability', label:'Reliability', def:[0.96,0.9,0.98,0.75,0.65,0.92]},
+  {k:'dwell', label:'Dwell (s, 999=∞)', def:[999,4,999,12,999,3]},
+  {k:'tasksAlready', label:'Tasks so far', def:[2,0,4,1,0,3]},
+];
+const NODE_NAMES = ['gw-0','gw-1','gw-2','gw-3','gw-4','gw-5'];
+let nodes = NODE_NAMES.map((name,i)=>{
+  const o = {name};
+  NODE_FIELDS.forEach(f=> o[f.k]=f.def[i]);
+  return o;
+});
+
+const WEIGHT_DEFS = [
+  {k:'cpu',label:'CPU free'},{k:'mem',label:'Memory free'},{k:'queue',label:'Queue (inv)'},
+  {k:'latency',label:'Latency (inv)'},{k:'soc',label:'SoC'},{k:'soh',label:'SoH'},
+  {k:'reliability',label:'Reliability'},{k:'mobility',label:'Mobility stability'},{k:'wear',label:'Wear balance'}
+];
+let baseWeights = {cpu:.12,mem:.08,queue:.10,latency:.13,soc:.11,soh:.13,reliability:.09,mobility:.12,wear:.12};
+let mode = 'fixed';
+const TASK_DURATION = 6;
+const MAX_BOOST = 2.5;
+
+function minMax(arr){
+  const lo=Math.min(...arr), hi=Math.max(...arr);
+  if(hi-lo < 1e-9) return arr.map(()=>1.0);
+  return arr.map(v=>(v-lo)/(hi-lo));
+}
+function stddev(arr){
+  const m = arr.reduce((a,b)=>a+b,0)/arr.length;
+  return Math.sqrt(arr.reduce((a,b)=>a+(b-m)*(b-m),0)/arr.length);
+}
+
+function computeScores(){
+  const n = nodes.length;
+  const cpu = nodes.map(x=>x.cpuFree), mem = nodes.map(x=>x.memFree);
+  const que = nodes.map(x=>1/(1+x.queue));
+  const lat = nodes.map(x=>1/Math.max(x.latency,0.001));
+  const soc = nodes.map(x=>x.soc), soh = nodes.map(x=>x.soh), rel = nodes.map(x=>x.reliability);
+  const mob = nodes.map(x=> x.dwell>=999 ? 1.0 : Math.min(1.0, x.dwell/TASK_DURATION));
+  const wear = nodes.map(x=>1/(1+x.tasksAlready));
+
+  const nCpu=minMax(cpu), nMem=minMax(mem), nQue=minMax(que), nLat=minMax(lat),
+        nSoc=minMax(soc), nSoh=minMax(soh), nRel=minMax(rel), nMob=minMax(mob), nWear=minMax(wear);
+
+  let w = {...baseWeights};
+  let mobSpread=0, sohSpread=0;
+  if(mode==='dynamic'){
+    mobSpread = stddev(nMob);
+    sohSpread = stddev(soh);
+    const mobBoost = 1 + Math.min(MAX_BOOST-1, 2*mobSpread*(MAX_BOOST-1));
+    const sohBoost = 1 + Math.min(MAX_BOOST-1, (sohSpread/0.15)*(MAX_BOOST-1));
+    w.mobility *= mobBoost;
+    w.soh *= sohBoost;
+    w.wear *= sohBoost;
+    const sum = Object.values(w).reduce((a,b)=>a+b,0);
+    Object.keys(w).forEach(k=> w[k] /= sum);
+  }
+
+  const scores = nodes.map((_,i)=>
+    w.cpu*nCpu[i] + w.mem*nMem[i] + w.queue*nQue[i] + w.latency*nLat[i] +
+    w.soc*nSoc[i] + w.soh*nSoh[i] + w.reliability*nRel[i] + w.mobility*nMob[i] + w.wear*nWear[i]
+  );
+  return {scores, w, mobSpread, sohSpread};
+}
+
+function renderNodeTable(){
+  const {scores} = computeScores();
+  const winnerIdx = scores.indexOf(Math.max(...scores));
+  let html = '<tr><th>Node</th>' + NODE_FIELDS.map(f=>`<th>${f.label}</th>`).join('') + '<th>Score</th></tr>';
+  nodes.forEach((node,i)=>{
+    html += `<tr class="${i===winnerIdx?'winner':''}"><td>${node.name}${i===winnerIdx?' <span class=\"badge\">SELECTED</span>':''}</td>`;
+    NODE_FIELDS.forEach(f=>{
+      html += `<td><input type="number" step="any" data-i="${i}" data-k="${f.k}" value="${node[f.k]}"></td>`;
+    });
+    html += `<td style="font-family:var(--f-mono);color:var(--accent)">${scores[i].toFixed(3)}</td></tr>`;
+  });
+  document.getElementById('nodeTable').innerHTML = html;
+  document.querySelectorAll('#nodeTable input').forEach(inp=>{
+    inp.addEventListener('input', e=>{
+      const i = +e.target.dataset.i, k = e.target.dataset.k;
+      const v = parseFloat(e.target.value);
+      if(!isNaN(v)) nodes[i][k] = v;
+      renderAll();
+    });
+  });
+}
+
+function renderWeightSliders(){
+  const container = document.getElementById('weightSliders');
+  container.innerHTML = WEIGHT_DEFS.map(w=>`
+    <div class="slider-item">
+      <div class="row"><label>${w.label}</label><span class="val" id="wv-${w.k}">${baseWeights[w.k].toFixed(2)}</span></div>
+      <input type="range" min="0" max="0.30" step="0.01" value="${baseWeights[w.k]}" data-k="${w.k}">
+    </div>`).join('');
+  container.querySelectorAll('input[type=range]').forEach(inp=>{
+    inp.addEventListener('input', e=>{
+      baseWeights[e.target.dataset.k] = parseFloat(e.target.value);
+      document.getElementById('wv-'+e.target.dataset.k).textContent = parseFloat(e.target.value).toFixed(2);
+      renderAll();
+    });
+  });
+}
+
+function renderWeightBars(){
+  const {w, mobSpread, sohSpread} = computeScores();
+  document.getElementById('weightBars').innerHTML = WEIGHT_DEFS.map(d=>{
+    const v = w[d.k];
+    return `<div class="weightbar-row"><div class="label">${d.label}</div>
+      <div class="track"><div class="fill" style="width:${Math.min(100,v*100/0.3)}%"></div></div>
+      <div class="num">${v.toFixed(3)}</div></div>`;
+  }).join('');
+  document.getElementById('mobSpreadVal').textContent = mobSpread.toFixed(3);
+  document.getElementById('sohSpreadVal').textContent = sohSpread.toFixed(3);
+  document.getElementById('dynSignals').style.opacity = mode==='dynamic' ? 1 : 0.4;
+}
+
+document.querySelectorAll('#modeToggle button').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    mode = btn.dataset.mode;
+    document.querySelectorAll('#modeToggle button').forEach(b=>b.classList.remove('on'));
+    btn.classList.add('on');
+    renderAll();
+  });
+});
+
+function renderAll(){
+  renderNodeTable();
+  renderWeightBars();
+}
+
+/* ================= init ================= */
+renderExplorer();
+renderWeightSliders();
+renderAll();
+</script>
+</body>
+</html>

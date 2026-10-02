@@ -1,7 +1,7 @@
-# NASA PCoE battery data (~122 MB) — too large for git.
-# Download separately, see data/README.md
-data/nasa_mat/
-*.mat
+# NASA PCoE battery data is INTENTIONALLY tracked in this copy of the repo
+# (data/nasa_mat/, ~122 MB) so the project is fully self-contained for
+# review. Re-add "data/nasa_mat/" and "*.mat" here if you'd rather keep the
+# GitHub repo lean and host the data elsewhere — see data/README.md.
 data/nasa_cache.pkl
 
 # SUMO intermediates (regenerate with sumo/generate_traces.sh)

@@ -115,6 +115,22 @@ def _extract_discharge_series(mat_path, outlier_frac=0.5):
     soh = np.minimum.accumulate(soh_raw)
     soh = np.clip(soh, 0.3, 1.0)
 
+    # Trailing-outlier guard: a single catastrophic one-cycle drop at the very
+    # end of a cell's record (e.g. B0040: flat at 0.985 for 27 cycles, then a
+    # final cycle reading 0.3) is a lab/equipment artifact -- an aborted or
+    # faulty final test -- not real aging. Real degradation does not cliff in
+    # one cycle. Drop trailing cycles whose single-step drop exceeds a
+    # physically implausible rate (>12% SoH in one cycle), mirroring the
+    # leading-outlier guard above but at the other end of the record.
+    MAX_STEP = 0.12
+    end = len(soh)
+    while end > 5 and (soh[end - 2] - soh[end - 1]) > MAX_STEP:
+        end -= 1
+    if end < len(soh):
+        soh = soh[:end]
+        feats_trim = end  # noqa: F841 (documents the truncation point)
+    
+
     # Quality gate: if the cleaned series never starts near full health, the
     # rated-capacity reference is unreliable (the file's early cycles are all
     # partial discharges) -> the SoH label would be meaningless. Reject it.
@@ -122,6 +138,7 @@ def _extract_discharge_series(mat_path, outlier_frac=0.5):
         return None
 
     feats = np.array(voltages[start:], dtype=np.float32)
+    feats = feats[:len(soh)]  # keep in sync if trailing-outlier guard trimmed soh
 
     # --- per-cell relative normalisation --------------------------------
     # Absolute discharge duration/area depend on the test protocol (1A vs 4A,
